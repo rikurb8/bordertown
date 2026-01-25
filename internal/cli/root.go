@@ -23,6 +23,7 @@ func NewRootCommand() *cobra.Command {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.AddCommand(newDummyCommand())
+	rootCmd.AddCommand(newStatusCommand())
 
 	return rootCmd
 }
