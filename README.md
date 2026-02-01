@@ -11,7 +11,7 @@ Bordertown is a reliable, portable agent orchestration system.
 Create a environment for:
 
 - Project management
-  - [ ] Iterating on project ideas / technical planning
+  - [x] Iterating on project ideas / technical planning
   - [ ] Creating actionable epics/features/tasks based on plan
 - Implementation
   - [ ] Have agent implement task

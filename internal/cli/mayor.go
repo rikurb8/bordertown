@@ -3,10 +3,14 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rikurb8/bordertown/internal/beads"
+	"github.com/rikurb8/bordertown/internal/config"
+	"github.com/rikurb8/bordertown/internal/prompts"
+	"github.com/rikurb8/bordertown/internal/session"
 	"github.com/spf13/cobra"
 )
 
@@ -18,6 +22,7 @@ func newMayorCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(newMayorReviewCommand())
+	cmd.AddCommand(newMayorNewEpicCommand())
 
 	return cmd
 }
@@ -149,6 +154,75 @@ func newMayorReviewCommand() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&showClosed, "all", false, "Include closed epics and issues")
+
+	return cmd
+}
+
+func newMayorNewEpicCommand() *cobra.Command {
+	var title string
+	var tool string
+
+	cmd := &cobra.Command{
+		Use:   "new-epic",
+		Short: "Start a planning session for a new epic",
+		Long:  "Spawns an AI session to help plan, refine, and create a new epic with tasks.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("get working directory: %w", err)
+			}
+
+			// Try to load town config for tool preference and context
+			var townCfg *config.TownConfig
+			planningTool := config.DefaultPlanningTool
+			configPath := filepath.Join(cwd, config.TownConfigFile)
+			if cfg, err := config.LoadTownConfig(configPath); err == nil {
+				townCfg = cfg
+				if townCfg.Mayor.PlanningTool != "" {
+					planningTool = townCfg.Mayor.PlanningTool
+				}
+			}
+
+			// Command-line flag overrides config
+			if tool != "" {
+				planningTool = tool
+			}
+
+			selectedTool := session.ParseTool(planningTool)
+
+			// Check if tool is available
+			if !session.Available(selectedTool) {
+				return fmt.Errorf("%s is not installed or not in PATH", selectedTool)
+			}
+
+			// Load custom prompt or use built-in default
+			var promptFilePath string
+			if townCfg != nil {
+				promptFilePath = townCfg.Mayor.PlanningPromptFile
+			}
+			basePrompt := prompts.LoadEpicPlanningPrompt(cwd, promptFilePath)
+
+			// Gather project context and build system prompt
+			ctx := prompts.GatherContext(cwd, townCfg)
+			systemPrompt := prompts.BuildSystemPromptWithBase(ctx, basePrompt)
+
+			// Build the session options
+			opts := session.Options{
+				Tool:         selectedTool,
+				SystemPrompt: systemPrompt,
+				Prompt:       prompts.EpicPlanningInitialPrompt(title),
+				WorkDir:      cwd,
+				Interactive:  true,
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Starting epic planning session with %s...\n\n", selectedTool)
+
+			return session.Spawn(opts)
+		},
+	}
+
+	cmd.Flags().StringVarP(&title, "title", "t", "", "Initial title or idea for the epic")
+	cmd.Flags().StringVar(&tool, "tool", "", "Override planning tool (claude or opencode)")
 
 	return cmd
 }

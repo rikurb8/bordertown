@@ -5,6 +5,12 @@ The `mayor` command provides project oversight and planning tools for your Borde
 ## Quick Start
 
 ```bash
+# Start planning a new epic
+bt mayor new-epic
+
+# Plan with an initial idea
+bt mayor new-epic --title "User authentication"
+
 # Review epics and planning status
 bt mayor review
 
@@ -13,6 +19,49 @@ bt mayor review --all
 ```
 
 ## Commands
+
+### `mayor new-epic`
+
+Spawns an interactive AI session to help you plan, refine, and create a new epic with tasks.
+
+**What it does:**
+
+1. Asks clarifying questions about scope, goals, and constraints
+2. Helps break down the work into actionable tasks
+3. Identifies dependencies between tasks
+4. Suggests priorities (P0-P4)
+5. Creates the epic and tasks using `bd` commands
+
+**Flags:**
+
+- `--title, -t` - Initial title or idea for the epic
+- `--tool` - Override planning tool (`claude` or `opencode`)
+
+**Configuration (town.yml):**
+
+```yaml
+mayor:
+  planning_tool: claude  # or opencode
+  planning_prompt_file: .bordertown/prompts/epic-planning.md  # optional custom prompt
+```
+
+**Custom Prompts:**
+
+You can customize the planning prompt by creating a file at:
+- Configured path in `town.yml` under `mayor.planning_prompt_file`
+- Default location: `.bordertown/prompts/epic-planning.md`
+
+If no custom prompt exists, the built-in default is used.
+
+**Context Injection:**
+
+The planning session automatically receives context about:
+- Project name and description (from `town.yml`)
+- Existing epics and their status (from beads)
+
+This helps the AI make suggestions aligned with your existing work.
+
+---
 
 ### `mayor review`
 

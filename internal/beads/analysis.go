@@ -53,11 +53,11 @@ func AnalyzeEpic(group EpicGroup) PlanningStatus {
 
 // EpicSummary provides a summary of an epic's status.
 type EpicSummary struct {
-	Epic          Issue
-	TotalTasks    int
-	OpenTasks     int
-	ClosedTasks   int
-	Planning      PlanningStatus
+	Epic        Issue
+	TotalTasks  int
+	OpenTasks   int
+	ClosedTasks int
+	Planning    PlanningStatus
 }
 
 // SummarizeEpic creates a summary for an epic group.

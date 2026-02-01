@@ -8,11 +8,12 @@ import (
 )
 
 const (
-	TownConfigFile    = "town.yml"
-	CurrentVersion    = 1
-	DefaultRigsDir    = "./rigs"
-	DefaultMayorModel = "claude-sonnet"
-	DefaultAgentModel = "claude-haiku"
+	TownConfigFile      = "town.yml"
+	CurrentVersion      = 1
+	DefaultRigsDir      = "./rigs"
+	DefaultMayorModel   = "claude-sonnet"
+	DefaultAgentModel   = "claude-haiku"
+	DefaultPlanningTool = "claude"
 )
 
 type TownConfig struct {
@@ -25,7 +26,9 @@ type TownConfig struct {
 }
 
 type MayorConfig struct {
-	Model string `yaml:"model,omitempty"`
+	Model              string `yaml:"model,omitempty"`
+	PlanningTool       string `yaml:"planning_tool,omitempty"`        // "claude" or "opencode"
+	PlanningPromptFile string `yaml:"planning_prompt_file,omitempty"` // custom prompt file path
 }
 
 type Defaults struct {
@@ -38,7 +41,8 @@ func NewTownConfig(name string) *TownConfig {
 		Name:    name,
 		RigsDir: DefaultRigsDir,
 		Mayor: MayorConfig{
-			Model: DefaultMayorModel,
+			Model:        DefaultMayorModel,
+			PlanningTool: DefaultPlanningTool,
 		},
 		Defaults: Defaults{
 			AgentModel: DefaultAgentModel,
