@@ -3,12 +3,14 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/rikurb8/bordertown/internal/rig"
 	"github.com/spf13/cobra"
 )
 
@@ -30,6 +32,8 @@ type dashboardData struct {
 	InProgress []bdIssue
 	Blocked    []bdIssue
 	Closed     []bdIssue
+	Rigs       []rigBeadsSummary
+	RigError   string
 }
 
 type dashboardDataMsg struct {
@@ -38,6 +42,21 @@ type dashboardDataMsg struct {
 }
 
 type dashboardTickMsg struct{}
+
+type rigBeadsSummary struct {
+	Name      string
+	LocalPath string
+	Status    bdStatusSummary
+	Ready     []bdIssue
+	Err       string
+}
+
+type dashboardViewMode string
+
+const (
+	viewOverview dashboardViewMode = "overview"
+	viewKanban   dashboardViewMode = "kanban"
+)
 
 type issueColumn struct {
 	Title    string
@@ -57,14 +76,19 @@ type dashboardModel struct {
 	summary      bdStatusSummary
 	errMessage   string
 	showHelp     bool
+	viewMode     dashboardViewMode
+	rigs         []rigBeadsSummary
+	rigError     string
 }
 
 type dashboardStyles struct {
 	header         lipgloss.Style
+	welcome        lipgloss.Style
 	subheader      lipgloss.Style
 	tag            lipgloss.Style
 	columnTitle    lipgloss.Style
 	columnTitleDim lipgloss.Style
+	panelTitle     lipgloss.Style
 	item           lipgloss.Style
 	itemSelected   lipgloss.Style
 	itemSelectedIn lipgloss.Style
@@ -99,8 +123,9 @@ func newDashboardCommand() *cobra.Command {
 
 func newDashboardModel(refresh time.Duration, limit int) dashboardModel {
 	return dashboardModel{
-		refresh: refresh,
-		limit:   limit,
+		refresh:  refresh,
+		limit:    limit,
+		viewMode: viewOverview,
 		columns: []issueColumn{
 			{Title: "Ready"},
 			{Title: "In Progress"},
@@ -138,19 +163,30 @@ func (m dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "h", "?":
 			m.showHelp = !m.showHelp
 			return m, nil
+		case "v":
+			m.toggleView()
+			return m, nil
 		case "tab", "right", "l":
-			m.activeColumn = (m.activeColumn + 1) % len(m.columns)
-			m.ensureVisible()
+			if m.viewMode == viewKanban {
+				m.activeColumn = (m.activeColumn + 1) % len(m.columns)
+				m.ensureVisible()
+			}
 			return m, nil
 		case "shift+tab", "left":
-			m.activeColumn = (m.activeColumn - 1 + len(m.columns)) % len(m.columns)
-			m.ensureVisible()
+			if m.viewMode == viewKanban {
+				m.activeColumn = (m.activeColumn - 1 + len(m.columns)) % len(m.columns)
+				m.ensureVisible()
+			}
 			return m, nil
 		case "down", "j":
-			m.moveSelection(1)
+			if m.viewMode == viewKanban {
+				m.moveSelection(1)
+			}
 			return m, nil
 		case "up", "k":
-			m.moveSelection(-1)
+			if m.viewMode == viewKanban {
+				m.moveSelection(-1)
+			}
 			return m, nil
 		case "r":
 			return m, loadDashboardDataCmd(m.limit)
@@ -165,6 +201,8 @@ func (m dashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.errMessage = ""
 		m.lastUpdated = time.Now()
 		m.summary = typed.Data.Status.Summary
+		m.rigs = typed.Data.Rigs
+		m.rigError = typed.Data.RigError
 		m.updateColumns(typed.Data)
 		m.ensureVisible()
 		return m, nil
@@ -181,7 +219,7 @@ func (m dashboardModel) View() string {
 	styles := newDashboardStyles()
 	header := renderDashboardHeader(styles)
 	stats := renderDashboardStats(m, styles)
-	body := renderDashboardColumns(m, styles)
+	body := renderDashboardBody(m, styles)
 	footer := renderDashboardFooter(m, styles)
 
 	output := lipgloss.JoinVertical(lipgloss.Left, header, stats, body, footer)
@@ -189,6 +227,14 @@ func (m dashboardModel) View() string {
 		output = renderHelpOverlay(output, m, styles)
 	}
 	return output
+}
+
+func (m *dashboardModel) toggleView() {
+	if m.viewMode == viewKanban {
+		m.viewMode = viewOverview
+		return
+	}
+	m.viewMode = viewKanban
 }
 
 func (m dashboardModel) tickCmd() tea.Cmd {
@@ -291,7 +337,8 @@ func renderDashboardHeader(styles dashboardStyles) string {
 		"            |___/                                        |_|    ",
 	}
 
-	return styles.header.Render(strings.Join(art, "\n"))
+	welcome := styles.welcome.Render("Welcome to Bordertown")
+	return lipgloss.JoinVertical(lipgloss.Left, welcome, styles.header.Render(strings.Join(art, "\n")))
 }
 
 func renderDashboardStats(m dashboardModel, styles dashboardStyles) string {
@@ -308,7 +355,13 @@ func renderDashboardStats(m dashboardModel, styles dashboardStyles) string {
 		styles.tag.Render(fmt.Sprintf("Deferred %d", status.DeferredIssues)),
 		styles.tag.Render(fmt.Sprintf("Closed %d", status.ClosedIssues)),
 	}
-	return styles.subheader.Render(lipgloss.JoinHorizontal(lipgloss.Left, tags...))
+	viewLabel := "Overview"
+	if m.viewMode == viewKanban {
+		viewLabel = "Kanban"
+	}
+	statsLine := styles.subheader.Render(lipgloss.JoinHorizontal(lipgloss.Left, tags...))
+	viewLine := styles.dimText.Render(fmt.Sprintf("View: %s (v toggle)  Town beads here, rig beads in rigs", viewLabel))
+	return lipgloss.JoinVertical(lipgloss.Left, statsLine, viewLine)
 }
 
 func renderDashboardColumns(m dashboardModel, styles dashboardStyles) string {
@@ -333,6 +386,134 @@ func renderDashboardColumns(m dashboardModel, styles dashboardStyles) string {
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, joinWithGap(gap, rendered)...)
+}
+
+func renderDashboardBody(m dashboardModel, styles dashboardStyles) string {
+	if m.viewMode == viewKanban {
+		return renderDashboardColumns(m, styles)
+	}
+	return renderDashboardOverview(m, styles)
+}
+
+func renderDashboardOverview(m dashboardModel, styles dashboardStyles) string {
+	gap := 2
+	width := m.width
+	if width <= 0 {
+		return ""
+	}
+	available := width - gap
+	if available < 2 {
+		available = 2
+	}
+	panelWidth := available / 2
+	panelHeight := availableListHeight(m.height)
+
+	townPanel := renderTownPanel(m, panelWidth, panelHeight, styles)
+	rigsPanel := renderRigsPanel(m, panelWidth, panelHeight, styles)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, joinWithGap(gap, []string{townPanel, rigsPanel})...)
+}
+
+func renderTownPanel(m dashboardModel, width int, height int, styles dashboardStyles) string {
+	status := m.summary
+	lines := []string{
+		styles.dimText.Render(truncateASCII(
+			fmt.Sprintf("Open %d  Ready %d  In Progress %d  Blocked %d  Closed %d", status.OpenIssues, status.ReadyIssues, status.InProgressIssues, status.BlockedIssues, status.ClosedIssues),
+			width,
+		)),
+		"",
+	}
+
+	lines = append(lines, renderIssuePreviewLines("Ready", m.columns[0].Issues, 2, width, styles)...)
+	lines = append(lines, "")
+	lines = append(lines, renderIssuePreviewLines("In Progress", m.columns[1].Issues, 2, width, styles)...)
+	lines = append(lines, "")
+	lines = append(lines, renderIssuePreviewLines("Blocked", m.columns[2].Issues, 2, width, styles)...)
+
+	return renderPanel("Town Beads", lines, width, height, styles)
+}
+
+func renderRigsPanel(m dashboardModel, width int, height int, styles dashboardStyles) string {
+	lines := []string{}
+	if m.rigError != "" {
+		lines = append(lines, styles.errorText.Render(truncateASCII(m.rigError, width)))
+		lines = append(lines, "")
+	}
+	if len(m.rigs) == 0 {
+		lines = append(lines, styles.dimText.Render(truncateASCII("No rigs registered. Add one with bordertown rig add.", width)))
+		return renderPanel("Rigs", lines, width, height, styles)
+	}
+
+	for idx, rigSummary := range m.rigs {
+		if idx > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, styles.columnTitle.Render(truncateASCII(rigSummary.Name, width)))
+		if rigSummary.Err != "" {
+			lines = append(lines, styles.errorText.Render(truncateASCII("Error: "+rigSummary.Err, width)))
+			continue
+		}
+		lines = append(lines, styles.dimText.Render(truncateASCII(
+			fmt.Sprintf("Open %d  Ready %d  In Prog %d  Blocked %d", rigSummary.Status.OpenIssues, rigSummary.Status.ReadyIssues, rigSummary.Status.InProgressIssues, rigSummary.Status.BlockedIssues),
+			width,
+		)))
+		lines = append(lines, styles.item.Render(truncateASCII(renderRigNextLine(rigSummary.Ready), width)))
+	}
+
+	return renderPanel("Rigs", lines, width, height, styles)
+}
+
+func renderRigNextLine(ready []bdIssue) string {
+	if len(ready) == 0 {
+		return "Next: (none)"
+	}
+	limit := minInt(len(ready), 2)
+	items := make([]string, 0, limit)
+	for i := 0; i < limit; i++ {
+		issue := ready[i]
+		items = append(items, fmt.Sprintf("P%d %s %s", issue.Priority, issue.ID, issue.Title))
+	}
+	return "Next: " + strings.Join(items, " | ")
+}
+
+func renderIssuePreviewLines(title string, issues []bdIssue, limit int, width int, styles dashboardStyles) []string {
+	lines := []string{styles.panelTitle.Render(truncateASCII(title, width))}
+	if len(issues) == 0 {
+		lines = append(lines, styles.dimText.Render(truncateASCII("(none)", width)))
+		return lines
+	}
+	if limit <= 0 {
+		return lines
+	}
+	if limit > len(issues) {
+		limit = len(issues)
+	}
+	for i := 0; i < limit; i++ {
+		issue := issues[i]
+		line := fmt.Sprintf("P%d %s %s", issue.Priority, issue.ID, issue.Title)
+		lines = append(lines, styles.item.Render(truncateASCII(line, width)))
+	}
+	return lines
+}
+
+func renderPanel(title string, lines []string, width int, height int, styles dashboardStyles) string {
+	if width <= 0 {
+		return ""
+	}
+	rows := make([]string, 0, height)
+	rows = append(rows, styles.panelTitle.Render(truncateASCII(title, width)))
+
+	bodyHeight := height - 1
+	if bodyHeight < 0 {
+		bodyHeight = 0
+	}
+	for i := 0; i < bodyHeight && i < len(lines); i++ {
+		rows = append(rows, lines[i])
+	}
+	for len(rows) < height {
+		rows = append(rows, "")
+	}
+	return lipgloss.NewStyle().Width(width).Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
 }
 
 func renderColumn(column issueColumn, width int, height int, active bool, styles dashboardStyles) string {
@@ -395,7 +576,10 @@ func renderColumn(column issueColumn, width int, height int, active bool, styles
 }
 
 func renderDashboardFooter(m dashboardModel, styles dashboardStyles) string {
-	hint := "h help  tab switch  j/k move  r refresh  q quit"
+	hint := "h help  v view  r refresh  q quit"
+	if m.viewMode == viewKanban {
+		hint = "h help  tab switch  j/k move  v view  r refresh  q quit"
+	}
 	updated := ""
 	updatedStyle := styles.dimText
 	if !m.lastUpdated.IsZero() {
@@ -427,9 +611,13 @@ func renderHelpOverlay(base string, m dashboardModel, styles dashboardStyles) st
 
 	help := []string{
 		styles.helpTitle.Render("Dashboard Help"),
-		styles.helpText.Render("Keys: q quit  tab switch columns  j/k move  r refresh  h close"),
-		"",
+		styles.helpText.Render("Keys: q quit  tab switch columns  j/k move  v view  r refresh  h close"),
 	}
+	viewLabel := "Overview"
+	if m.viewMode == viewKanban {
+		viewLabel = "Kanban"
+	}
+	help = append(help, styles.helpText.Render(fmt.Sprintf("View: %s (v toggle)", viewLabel)), "")
 
 	selected := m.selectedIssue()
 	if selected != nil {
@@ -504,12 +692,16 @@ func fetchDashboardData(limit int) (dashboardData, error) {
 		return dashboardData{}, err
 	}
 
+	rigs, rigErr := fetchRigsData(2)
+
 	return dashboardData{
 		Status:     status,
 		Ready:      ready,
 		InProgress: inProgress,
 		Blocked:    blocked,
 		Closed:     closed,
+		Rigs:       rigs,
+		RigError:   rigErr,
 	}, nil
 }
 
@@ -518,6 +710,81 @@ func fetchIssues(args []string, limit int) ([]bdIssue, error) {
 		args = append(args, "--limit", strconv.Itoa(limit))
 	}
 	output, err := runBdJSON(args...)
+	if err != nil {
+		return nil, err
+	}
+	return parseBdIssues(output)
+}
+
+func fetchRigsData(previewLimit int) ([]rigBeadsSummary, string) {
+	rigs, err := rig.ListRigs()
+	if err != nil {
+		return nil, fmt.Sprintf("Load rigs: %v", err)
+	}
+
+	if len(rigs) == 0 {
+		return []rigBeadsSummary{}, ""
+	}
+
+	results := make([]rigBeadsSummary, 0, len(rigs))
+	for _, rigItem := range rigs {
+		summary := rigBeadsSummary{
+			Name:      rigItem.Name,
+			LocalPath: rigItem.LocalPath,
+		}
+		if rigItem.LocalPath == "" {
+			summary.Err = "missing local path"
+			results = append(results, summary)
+			continue
+		}
+		info, err := os.Stat(rigItem.LocalPath)
+		if err != nil {
+			summary.Err = err.Error()
+			results = append(results, summary)
+			continue
+		}
+		if !info.IsDir() {
+			summary.Err = "path is not a directory"
+			results = append(results, summary)
+			continue
+		}
+		status, err := fetchStatusInDir(rigItem.LocalPath)
+		if err != nil {
+			summary.Err = err.Error()
+			results = append(results, summary)
+			continue
+		}
+		summary.Status = status.Summary
+		ready, err := fetchIssuesInDir(rigItem.LocalPath, []string{"list", "--ready", "--json", "--sort", "priority"}, previewLimit)
+		if err != nil {
+			summary.Err = err.Error()
+			results = append(results, summary)
+			continue
+		}
+		summary.Ready = ready
+		results = append(results, summary)
+	}
+
+	return results, ""
+}
+
+func fetchStatusInDir(dir string) (bdStatus, error) {
+	output, err := runBdJSONInDir(dir, "status", "--json")
+	if err != nil {
+		return bdStatus{}, err
+	}
+	var status bdStatus
+	if err := json.Unmarshal(output, &status); err != nil {
+		return bdStatus{}, fmt.Errorf("parse bd status: %w", err)
+	}
+	return status, nil
+}
+
+func fetchIssuesInDir(dir string, args []string, limit int) ([]bdIssue, error) {
+	if limit > 0 {
+		args = append(args, "--limit", strconv.Itoa(limit))
+	}
+	output, err := runBdJSONInDir(dir, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -545,19 +812,21 @@ func newDashboardStyles() dashboardStyles {
 	}
 
 	return dashboardStyles{
-		header:         lipgloss.NewStyle().Foreground(lipgloss.Color("228")).Bold(true),
-		subheader:      lipgloss.NewStyle().Foreground(lipgloss.Color("223")),
-		tag:            lipgloss.NewStyle().Foreground(lipgloss.Color("235")).Background(lipgloss.Color("215")).Padding(0, 1),
-		columnTitle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("221")),
-		columnTitleDim: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("241")),
-		item:           lipgloss.NewStyle().Foreground(lipgloss.Color("252")),
-		itemSelected:   lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("60")).Bold(true),
-		itemSelectedIn: lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("236")),
-		footer:         lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
-		helpBox:        lipgloss.NewStyle().Border(border).Padding(1, 2).Foreground(lipgloss.Color("230")).Background(lipgloss.Color("235")),
-		helpTitle:      lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("222")),
-		helpText:       lipgloss.NewStyle().Foreground(lipgloss.Color("230")),
-		dimText:        lipgloss.NewStyle().Foreground(lipgloss.Color("242")),
+		header:         lipgloss.NewStyle().Foreground(lipgloss.Color("117")).Bold(true),
+		welcome:        lipgloss.NewStyle().Foreground(lipgloss.Color("159")).Bold(true),
+		subheader:      lipgloss.NewStyle().Foreground(lipgloss.Color("153")),
+		tag:            lipgloss.NewStyle().Foreground(lipgloss.Color("24")).Background(lipgloss.Color("159")).Padding(0, 1),
+		columnTitle:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("111")),
+		columnTitleDim: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("67")),
+		panelTitle:     lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("111")),
+		item:           lipgloss.NewStyle().Foreground(lipgloss.Color("254")),
+		itemSelected:   lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("27")).Bold(true),
+		itemSelectedIn: lipgloss.NewStyle().Foreground(lipgloss.Color("153")).Background(lipgloss.Color("24")),
+		footer:         lipgloss.NewStyle().Foreground(lipgloss.Color("110")),
+		helpBox:        lipgloss.NewStyle().Border(border).BorderForeground(lipgloss.Color("111")).Padding(1, 2).Foreground(lipgloss.Color("254")).Background(lipgloss.Color("24")),
+		helpTitle:      lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("159")),
+		helpText:       lipgloss.NewStyle().Foreground(lipgloss.Color("254")),
+		dimText:        lipgloss.NewStyle().Foreground(lipgloss.Color("110")),
 		errorText:      lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Bold(true),
 	}
 }

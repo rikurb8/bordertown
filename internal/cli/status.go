@@ -188,6 +188,21 @@ func runBdJSON(args ...string) ([]byte, error) {
 	return output, nil
 }
 
+func runBdJSONInDir(dir string, args ...string) ([]byte, error) {
+	command := exec.Command("bd", args...)
+	command.Dir = dir
+	output, err := command.CombinedOutput()
+	if err != nil {
+		message := strings.TrimSpace(string(output))
+		if message != "" {
+			message = "\n" + message
+		}
+		return nil, fmt.Errorf("bd %s failed: %w%s", strings.Join(args, " "), err, message)
+	}
+
+	return output, nil
+}
+
 func padRight(value string, width int) string {
 	if len(value) >= width {
 		return value

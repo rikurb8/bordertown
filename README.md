@@ -51,6 +51,15 @@ Your workspace directory (e.g., `~/bordertown/`). Contains all projects, agents,
 
 Project containers. Each rig wraps a git repository and manages its associated agents.
 
+### Beads 📌
+
+Work items tracked by `bd`, split into two flavors:
+
+- Town beads: Bordertown's own work, managed in this repo.
+- Rig beads: project work inside each rig repo.
+
+See `docs/TOWN.md` and `docs/RIG.md` for details.
+
 ### Crew Members 👤
 
 Your personal workspace within a rig. Where you do hands-on work.

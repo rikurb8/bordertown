@@ -22,6 +22,14 @@ bt town init --force
 
 A **Town** is your workspace directory - the root folder containing your projects (rigs), agents, and configuration. The `town.yml` file stores workspace-level settings.
 
+## Town beads vs rig beads
+
+Town beads track work for Bordertown itself (the workspace-level tool). These beads live in the Bordertown repo and show up as "Town beads" in the dashboard.
+
+Rig beads track work inside a specific rig repository. Run `bd` commands from within a rig to manage them. The dashboard shows each rig with its own bead summary.
+
+See `docs/RIG.md` for rig-specific details.
+
 ## town.yml Configuration
 
 Running `bt town init` creates a `town.yml` file:
