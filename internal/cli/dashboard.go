@@ -1,13 +1,14 @@
-package dashboard
+package cli
 
 import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/rikurb8/carnie/internal/dashboard"
 	"github.com/spf13/cobra"
 )
 
-func NewCommand() *cobra.Command {
+func newDashboardCommand() *cobra.Command {
 	var refresh time.Duration
 	var limit int
 
@@ -15,7 +16,7 @@ func NewCommand() *cobra.Command {
 		Use:   "dashboard",
 		Short: "Launch the Carnie dashboard",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			model := NewModel(refresh, limit)
+			model := dashboard.NewModel(refresh, limit)
 			program := tea.NewProgram(model, tea.WithAltScreen())
 			_, err := program.Run()
 			return err

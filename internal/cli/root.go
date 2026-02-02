@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/rikurb8/carnie/internal/cli/dashboard"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -23,7 +22,7 @@ func NewRootCommand() *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.carnie.yaml)")
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.AddCommand(dashboard.NewCommand())
+	rootCmd.AddCommand(newDashboardCommand())
 	rootCmd.AddCommand(newCampCommand())
 	rootCmd.AddCommand(newOperatorCommand())
 

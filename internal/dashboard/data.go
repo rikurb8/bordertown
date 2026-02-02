@@ -12,7 +12,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/rikurb8/carnie/internal/cli/bd"
+	"github.com/rikurb8/carnie/internal/bd"
 )
 
 func loadDashboardDataCmd(limit int) tea.Cmd {

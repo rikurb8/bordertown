@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/rikurb8/carnie/internal/cli/bd"
+	"github.com/rikurb8/carnie/internal/bd"
 )
 
 type Issue struct {
