@@ -12,26 +12,61 @@
 
 ## What is this?
 
-Carnie is a reliable, portable agent orchestration system installed inside your project. It brings a crew of helpers into your repo, keeps their work tracked, and makes planning feel like a well-run show.
+Carnie is a observable and opinionated agent orchestration system with sane defaults installed inside your project. It brings a crew of helpers into your repo, keeps their work tracked, and helps with project management (and much more).
 
 ## Quick Start
 
 ```bash
-carnie camp init
+# Initialize Carnie Camp in your project
+carnie init
+
+# Talk to Randy the Operator
+carnie operator
+
+# Check project status and beads
 carnie status
+
+# View the beads dashboard
 carnie dashboard
-carnie operator review
 ```
 
-## CLI Highlights
+## Workflows
 
-- `carnie status` shows project details and beads summary
-- `carnie dashboard` launches the full-screen beads dashboard
-- `carnie operator new-epic` kicks off AI-assisted planning
+### Planning with Randy
+
+Talk to Randy naturally - be as vague or specific as you want:
+
+```bash
+carnie operator
+> "Let's add user authentication"
+> "We need to improve the dashboard performance"
+> "What should we work on next?"
+```
+
+Randy will help expand your ideas into structured Beads with proper hierarchy and dependencies.
+
+### Executing Work
+
+Once Beads are created, assign them to Carnies:
+
+```bash
+# Randy assigns epic/feature to a Carnie
+# Carnie opens in a tmux session and starts working through tasks
+# You can monitor progress via status or dashboard
+```
+
+The Carnie autonomously works through tasks, creating new Beads for side-tracks or blockers, and notifies Randy when complete.
+
+## CLI Commands
+
+- `carnie init` - Initialize Carnie Camp in your project
+- `carnie operator` - Talk to Randy the Operator
+- `carnie status` - Show project details and beads summary
+- `carnie dashboard` - Launch full-screen beads dashboard
 
 ## Why Carnie?
 
-| Challenge                      | Carnie Solution                               |
+| Challenge                      | Carnie Solution                              |
 | ------------------------------ | -------------------------------------------- |
 | Agents lose context on restart | Work persists in git-backed hooks            |
 | Manual agent coordination      | Built-in mailboxes, identities, and handoffs |
@@ -42,25 +77,84 @@ carnie operator review
 
 ### The Operator 🎛️
 
-Operator is the main interaction point for all things related to Carnie. You can ask it about Carnie, plan work and manage agents.
+Randy the Operator is your main interface to Carnie Camp. He helps you plan work, manage agents, and coordinate tasks. Randy runs on Opencode by default (Claude Code also supported) and can trigger workflows based on your conversations.
+
+**What Randy can do:**
+
+- Break down ideas into structured Beads (epic → feature → task → subtask hierarchy)
+- Create and manage dependencies between Beads
+- Assign work to Carnies (agent workers)
+- Provide overviews of existing work
+- Answer questions about the project
 
 ### Camp 🏕️
 
-Your project-local workspace. Initialize it with `carnie camp init` to create `camp.yml` inside the repo. Contains general configuration related to tools, user preferences, and project-specific settings.
+Your project-local workspace created with `carnie init`. The `.carniecamp/` directory contains:
+
+- `carniecamp.db` - Work tracking database
+- `camp.yml` - Configuration for tools, preferences, and project settings
+- Other relevant content (git-tracked except explicitly .gitignored)
+
+Example `camp.yml`:
+
+```yaml
+version: 1
+name: my-project
+
+# Optional: Project description
+description: My awesome project
+
+# Operator configuration (Randy)
+operator:
+  # Model for the operator (default: openai/gpt-5.2-codex)
+  model: openai/gpt-5.2-codex
+
+  # Planning tool: "opencode" or "claude" (default: opencode)
+  planning_tool: opencode
+
+  # Optional: Custom planning prompt file path
+  # planning_prompt_file: .carniecamp/custom_prompt.md
+
+# Default settings for Carnies (workers)
+defaults:
+  # Model for agent workers (default: openai/gpt-5.2-codex)
+  agent_model: openai/gpt-5.2-codex
+```
 
 ### Beads 📌
 
-Beads are the unit of work in Carnie. They represent a single task or a group of tasks that need to be completed. Beads can be created, assigned, and tracked using the Operator.
+Beads are the unit of work in Carnie Camp with a hierarchical structure:
+
+- **Epic** - Large body of work
+- **Feature** - Specific capability or improvement
+- **Task** - Concrete work item
+- **Subtask** - Granular step
+
+Beads can have dependencies and are tracked through their lifecycle.
+
+### Carnies 🎪
+
+Carnies are the workers - Opencode/Claude Code tmux sessions with primed context. When assigned work, they:
+
+1. Claim tasks (mark as in-progress)
+2. Complete the work
+3. Track new ideas or blockers encountered
+4. Mark tasks as completed
+5. Move to the next task
+6. Send mail when all related work is done
+
+Randy receives notifications when work is completed and can take actions like code review or merging.
 
 See `docs/CAMP.md` and `docs/OPERATOR.md` for details.
 
 ## Carnie Rules
 
-- TODO
+- All actions must be observable.
+- Given Bead hierarchy must be completed before finishing. After all tasks are marked complete, report completion to Randy.
 
 ## Installation
 
-- TODO
+- see Taskfile.yml
 
 ## References / inspiration
 
