@@ -25,6 +25,7 @@ func NewRootCommand() *cobra.Command {
 	rootCmd.AddCommand(newDashboardCommand())
 	rootCmd.AddCommand(newCampCommand())
 	rootCmd.AddCommand(newOperatorCommand())
+	rootCmd.AddCommand(newPrimeCommand())
 
 	return rootCmd
 }
